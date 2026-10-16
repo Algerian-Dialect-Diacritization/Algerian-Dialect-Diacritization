@@ -274,8 +274,8 @@ def test_table_builder_ignores_test_rows_in_dev_columns(tmp_path: Path) -> None:
 
 
 def test_audit_keeps_signs_and_reads_latex_ranges_as_unsigned() -> None:
-    found = NUMBER.findall("gap of -0.99 (CI [-1.41, +0.35]) and 94.97--95.41".replace("$", ""))
-    assert found == [("-", "0.99"), ("-", "1.41"), ("+", "0.35"), ("", "94.97"), ("", "95.41")]
+    found = NUMBER.findall("gap of $-0.99$ (CI $[-1.41, +0.35]$) and 94.97--95.41, word$0.5$")
+    assert found == [("-", "0.99"), ("-", "1.41"), ("+", "0.35"), ("", "94.97"), ("", "95.41"), ("", "0.5")]
     assert traceable("-", "0.25", {-0.0025})
     assert not traceable("-", "0.25", {0.25})
     assert not traceable("", "0.25", {-0.25})

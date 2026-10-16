@@ -67,7 +67,7 @@ def main() -> None:
         for line_number, line in enumerate(text.splitlines(), start=1):
             if line.lstrip().startswith("%"):
                 continue
-            for sign, number in NUMBER.findall(line.replace("$", "")):
+            for sign, number in NUMBER.findall(line):
                 if not traceable(sign, number, values):
                     flagged += 1
                     print("{}:{}: {}{}".format(path.name, line_number, sign, number))
