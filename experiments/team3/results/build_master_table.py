@@ -101,7 +101,8 @@ TYPE_LABEL = {
     "baseline": "floor", "llm": "LLM",
 }
 MAIN_CAPTION = (
-    "Baselines on DzTashkeel, all trained on the Algerian corpus only. Leaderboard columns give "
+    "Baselines on DzTashkeel. Every fine-tuned system is trained on the Algerian corpus only; the LLM rows "
+    "use prompting without any fine-tuning. Leaderboard columns give "
     "letter-level micro-F1 (\\%) on the hidden test split (public/private partitions); they are the only "
     "numbers computed identically for every system. Dev columns are as reported for each family. "
     "$^\\dagger$~Dev metrics on a held-out 20\\% of the dev split (3{,}228 letters). "
@@ -109,8 +110,10 @@ MAIN_CAPTION = (
     "Unmarked dev numbers use the full dev split (15{,}897 letters)."
 )
 LLM_CAPTION = (
-    "LLM versus fine-tuned systems on the full dev split (607 sentences, 15{,}897 letters), all scored by "
-    "the shared evaluator. DER$^*$/WER$^*$ exclude the final letter of multi-letter words. OOV and Ambig.\\ "
+    "LLM versus fine-tuned systems on the full dev split (607 sentences, 15{,}897 letters), scored by the "
+    "shared evaluator except the lookup floor, whose word-level figures come from the word-lexicon baseline "
+    "of family (d)(ii) (unseen words counted as errors). DER$^*$/WER$^*$ exclude the final letter of "
+    "multi-letter words. OOV and Ambig.\\ "
     "give WER on words unseen in training and on training words with more than one attested vocalization. "
     "All values in \\%."
 )
@@ -199,7 +202,7 @@ def write_markdown_main(rows, path: Path) -> None:
             mark = MD_SCOPE_MARK[r["dev_scope"]]
             lines.append(
                 "| {} | {} | {} | {} | {}{} | {}{} | {} |".format(
-                    r["model"], r["system_type"], public.replace("$^\\S$", " §"), private,
+                    r["model"], TYPE_LABEL[r["system_type"]], public.replace("$^\\S$", " §"), private,
                     pct(r["dev_accuracy"]), mark if r["dev_accuracy"] is not None else "",
                     pct(r["dev_wer"]), mark if r["dev_wer"] is not None else "", r["source"],
                 )
