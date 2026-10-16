@@ -48,10 +48,15 @@ def record_from_mapping(raw: Mapping[str, Any]) -> SentenceRecord:
 
 def load_jsonl(path: Path) -> List[SentenceRecord]:
     records: List[SentenceRecord] = []
+    seen = set()
     with Path(path).open("r", encoding="utf-8") as stream:
         for line in stream:
             if line.strip():
-                records.append(record_from_mapping(json.loads(line)))
+                record = record_from_mapping(json.loads(line))
+                if record.sent_id in seen:
+                    raise ValueError("{}: duplicated sent_id {}".format(path, record.sent_id))
+                seen.add(record.sent_id)
+                records.append(record)
     if not records:
         raise ValueError("{} contains no records".format(path))
     return records

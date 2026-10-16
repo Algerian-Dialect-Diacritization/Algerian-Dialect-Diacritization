@@ -18,12 +18,14 @@ python -m evaluation.common.score --gold data/dev_data/dev_Algerian-DIAC.jsonl \
   --model-name "claude-opus-5-5 (five_shot)" --track llm --split dev --system-type llm \
   --append-master $D/results/MASTER_RESULTS_scored.csv
 python -m experiments.team3.llm_benchmark.analyze --gold data/dev_data/dev_Algerian-DIAC.jsonl \
-  --train data/train_data/train_Algerian-DIAC.jsonl --system llm_five=... --system t4_neural=... \
-  --compare t4_neural:llm_five --examples-for llm_five --out $D/llm/analysis
+  --train data/train_data/train_Algerian-DIAC.jsonl \
+  --system llm_zero=... --system llm_five=... --system t4_neural=... --system t4_v2=... \
+  --compare t4_neural:llm_five --compare t4_v2:llm_five --compare llm_five:llm_zero \
+  --examples-for llm_five --reference-system t4_v2 --out $D/llm/analysis
 ```
 
 ## Results and tables (`results/`)
 
 - `reported_results.py` is the registry of the numbers each track reported, with source files and scope notes (full dev / Track 3's 20% dev slice / unknown). The Kaggle public/private micro-F1 is the cross-track comparison.
-- `build_master_table.py` merges the registry with the shared-scorer rows into `MASTER_RESULTS.csv` and generates `tab_main_results.tex`, `tab_llm.tex` and `MAIN_RESULTS.md`. Tables are never edited by hand. Pass `--llm-kaggle PUBLIC PRIVATE` once the LLM submission is scored.
+- `build_master_table.py` (expects the four analysis systems `llm_zero`, `llm_five`, `t4_neural`, `t4_v2`; missing ones are skipped in `tab_llm.tex`) merges the registry with the shared-scorer rows into `MASTER_RESULTS.csv` and generates `tab_main_results.tex`, `tab_llm.tex` and `MAIN_RESULTS.md`. Tables are never edited by hand. Pass `--llm-kaggle PUBLIC PRIVATE` once the LLM submission is scored.
 - `audit_numbers.py` lists any decimal in the paper prose that cannot be traced to the results files.

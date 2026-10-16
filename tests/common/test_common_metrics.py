@@ -1,9 +1,12 @@
+import csv
+import hashlib
 import json
+import sys
 from pathlib import Path
 
 import pytest
 
-from evaluation.common.data import SentenceRecord
+from evaluation.common.data import SentenceRecord, load_jsonl
 from evaluation.common.labels import apply_diacritics
 from evaluation.common.paper_metrics import (
     compute_paper_metrics,
@@ -12,6 +15,9 @@ from evaluation.common.paper_metrics import (
 )
 from evaluation.common.projection import normalize_vocalized, project
 from evaluation.common.score import append_master, load_predictions, score
+from experiments.team3.llm_benchmark.build_batches import evaluation_inputs
+from experiments.team3.llm_benchmark.collect_outputs import main as collect_main
+from experiments.team3.results.build_master_table import merge
 
 
 def _records() -> list:
@@ -112,7 +118,8 @@ def test_changed_letter_is_unaligned_and_strict_accuracy_drops() -> None:
     assert metrics["accuracy"] == 1.0  # label 0 on the unaligned letter happens to match gold
     assert metrics["accuracy_strict"] == pytest.approx(3 / 4)
     assert metrics["skeleton_mismatch_count"] == 1
-    assert metrics["cer"] > 0.0
+    # "سَارَة" vs "سَارَه": 6 NFC code points, one substitution.
+    assert metrics["cer"] == pytest.approx(1 / 6)
     assert rows[0]["unaligned_letters"] == 1
 
 
@@ -134,11 +141,127 @@ def test_text_and_label_prediction_files_score_identically(tmp_path: Path) -> No
         assert from_labels[key] == pytest.approx(from_text[key]), key
 
 
-def test_append_master_replaces_same_model_and_split(tmp_path: Path) -> None:
+def _read_csv(path: Path) -> list:
+    with path.open(encoding="utf-8", newline="") as stream:
+        return list(csv.DictReader(stream))
+
+
+def test_append_master_replaces_same_model_track_and_split(tmp_path: Path) -> None:
     master = tmp_path / "master.csv"
-    append_master(master, {"model": "m", "split": "dev", "accuracy": 0.5})
-    append_master(master, {"model": "m", "split": "dev", "accuracy": 0.7})
-    append_master(master, {"model": "m", "split": "test", "accuracy": 0.6})
-    lines = master.read_text(encoding="utf-8").strip().splitlines()
-    assert len(lines) == 3
-    assert ",0.7," in lines[1]
+    append_master(master, {"model": "m", "track": "t1", "split": "dev", "accuracy": 0.5})
+    append_master(master, {"model": "m", "track": "t1", "split": "dev", "accuracy": 0.7})
+    append_master(master, {"model": "m", "track": "t1", "split": "test", "accuracy": 0.6})
+    append_master(master, {"model": "m", "track": "t2", "split": "dev", "accuracy": 0.9})
+    rows = {(r["model"], r["track"], r["split"]): r for r in _read_csv(master)}
+    assert len(rows) == 3
+    assert rows[("m", "t1", "dev")]["accuracy"] == "0.7"
+    assert rows[("m", "t1", "test")]["accuracy"] == "0.6"
+    assert rows[("m", "t2", "dev")]["accuracy"] == "0.9"
+    assert not (tmp_path / "master.csv.tmp").exists()
+
+
+def _write_jsonl(path: Path, rows) -> Path:
+    path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
+    return path
+
+
+def test_duplicate_and_unexpected_prediction_ids_are_rejected(tmp_path: Path) -> None:
+    records = _records()
+    good = [{"sent_id": r.sent_id, "labels": list(r.labels)} for r in records]
+    with pytest.raises(ValueError, match="duplicated"):
+        load_predictions(_write_jsonl(tmp_path / "dup.jsonl", good + [good[0]]), records)
+    extra = good + [{"sent_id": "999999", "labels": [0]}]
+    with pytest.raises(ValueError, match="absent from gold"):
+        load_predictions(_write_jsonl(tmp_path / "extra.jsonl", extra), records)
+
+
+def test_duplicate_gold_ids_are_rejected(tmp_path: Path) -> None:
+    row = {"sent_id": "000001", "chars": list("بت"), "labels": [1, 7], "input": "بت"}
+    with pytest.raises(ValueError, match="duplicated sent_id"):
+        load_jsonl(_write_jsonl(tmp_path / "gold.jsonl", [row, row]))
+
+
+def test_runaway_output_is_unaligned_without_quadratic_alignment() -> None:
+    record = _records()[0]
+    result = project(record.chars, "ب" * 10_000)
+    assert not result.skeleton_match
+    assert result.unaligned_letters == 4
+    assert result.labels == (0, 0, 0, 0, 0)
+
+
+def _data_root(tmp_path: Path, ids: str, texts: str) -> Path:
+    root = tmp_path / "data"
+    (root / "test_data").mkdir(parents=True)
+    (root / "test_data" / "raw_sentences_test_ids.txt").write_text(ids, encoding="utf-8")
+    (root / "test_data" / "raw_sentences_test.txt").write_text(texts, encoding="utf-8")
+    return root
+
+
+def test_test_inputs_with_mismatched_line_counts_are_rejected(tmp_path: Path) -> None:
+    root = _data_root(tmp_path, "000001\n000002\n", "بت\n")
+    with pytest.raises(ValueError, match="different line counts"):
+        evaluation_inputs(root, "test")
+    ok = _data_root(tmp_path / "ok", "000001\n000002\n", "بت\nتم\n")
+    assert [r["sent_id"] for r in evaluation_inputs(ok, "test")] == ["000001", "000002"]
+
+
+def _run_collector(llm_dir: Path, monkeypatch) -> int:
+    monkeypatch.setattr(
+        sys, "argv",
+        ["collect_outputs", "--llm-dir", str(llm_dir), "--condition", "zero_shot", "--split", "test"],
+    )
+    try:
+        collect_main()
+    except SystemExit as exit_:
+        return int(exit_.code or 0)
+    return 0
+
+
+def _llm_dir(tmp_path: Path, manifest_ids, answers: str) -> Path:
+    llm = tmp_path / "llm"
+    batch_dir = llm / "batches" / "zero_shot" / "test"
+    batch_dir.mkdir(parents=True)
+    prompt = "prompt\n"
+    (batch_dir / "batch_01.prompt.md").write_text(prompt, encoding="utf-8")
+    (batch_dir / "manifest.json").write_text(json.dumps({"batches": [{
+        "batch": 1, "prompt_file": "batch_01.prompt.md",
+        "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(), "sent_ids": manifest_ids,
+    }]}), encoding="utf-8")
+    (llm / "inputs").mkdir()
+    _write_jsonl(llm / "inputs" / "test.jsonl",
+                 [{"sent_id": "000001", "input": "بت"}, {"sent_id": "000002", "input": "تم"}])
+    out = llm / "claude-opus-5-5" / "zero_shot" / "test"
+    out.mkdir(parents=True)
+    (out / "batch_01.out.tsv").write_text(answers, encoding="utf-8")
+    return llm
+
+
+def test_collector_writes_predictions_only_when_complete(tmp_path: Path, monkeypatch) -> None:
+    complete = "000001\tبَتْ\n000002\tتَمْ\n"
+    llm = _llm_dir(tmp_path / "ok", ["000001", "000002"], complete)
+    assert _run_collector(llm, monkeypatch) == 0
+    predictions = llm / "claude-opus-5-5" / "predictions"
+    assert (predictions / "zero_shot_test.vocalized.txt").read_text(encoding="utf-8").splitlines() == ["بَتْ", "تَمْ"]
+
+    missing = _llm_dir(tmp_path / "missing", ["000001", "000002"], "000001\tبَتْ\n")
+    assert _run_collector(missing, monkeypatch) == 1
+    assert not (missing / "claude-opus-5-5" / "predictions" / "zero_shot_test.jsonl").exists()
+
+    uncovered = _llm_dir(tmp_path / "uncovered", ["000001"], "000001\tبَتْ\n")
+    assert _run_collector(uncovered, monkeypatch) == 1
+    report = json.loads((uncovered / "claude-opus-5-5" / "predictions" / "zero_shot_test.collect.json").read_text())
+    assert report["not_in_manifest"] == ["000002"]
+
+
+def test_table_builder_ignores_test_rows_in_dev_columns(tmp_path: Path) -> None:
+    scored = tmp_path / "scored.csv"
+    for split, accuracy in (("dev", 0.9), ("test", 0.1)):
+        append_master(scored, {
+            "model": "claude-opus-5-5 (five_shot)", "track": "llm", "split": split,
+            "system_type": "llm", "accuracy": accuracy, "der": 0, "der_star": 0, "der_diacritized": 0,
+            "wer": 0, "wer_star": 0, "wer_aligned": 0, "cer": 0, "macro_f1": 0,
+            "macro_f1_present_classes": 0, "word_accuracy": 0, "sentence_accuracy": 0,
+            "skeleton_mismatch_rate": 0, "accuracy_strict": 0, "scored_letters": 1, "source": "x",
+        })
+    rows = {r["key"]: r for r in merge(Path("."), scored, None)}
+    assert rows["llm_claude_five"]["dev_accuracy"] == 0.9

@@ -52,16 +52,31 @@ def load_predictions(
     List[List[int]], Optional[List[str]], List[Tuple[bool, ...]], List[bool]
 ]:
     rows: Dict[str, Dict[str, Any]] = {}
+    duplicated: List[str] = []
     with path.open(encoding="utf-8") as stream:
         for line in stream:
             if line.strip():
                 row = json.loads(line)
-                rows[str(row["sent_id"])] = row
+                sent_id = str(row["sent_id"])
+                if sent_id in rows:
+                    duplicated.append(sent_id)
+                rows[sent_id] = row
+    if duplicated:
+        raise ValueError(
+            "{} duplicated prediction ids, e.g. {}".format(len(duplicated), duplicated[:5])
+        )
     missing = [record.sent_id for record in records if record.sent_id not in rows]
     if missing:
         raise ValueError(
             "{} gold sentences have no prediction, e.g. {}".format(
                 len(missing), missing[:5]
+            )
+        )
+    unexpected = sorted(set(rows) - {record.sent_id for record in records})
+    if unexpected:
+        raise ValueError(
+            "{} predictions have ids absent from gold, e.g. {}".format(
+                len(unexpected), unexpected[:5]
             )
         )
     uses_text = "text" in rows[records[0].sent_id]
@@ -146,21 +161,24 @@ def score(
     return metrics, rows
 
 
+def _master_key(row: Dict[str, Any]) -> Tuple[str, str, str]:
+    return (str(row.get("model", "")), str(row.get("track", "")), str(row.get("split", "")))
+
+
 def append_master(path: Path, row: Dict[str, Any]) -> None:
+    """Add or replace the row with the same (model, track, split), atomically."""
     existing: List[Dict[str, Any]] = []
     if path.exists():
         with path.open(encoding="utf-8", newline="") as stream:
-            existing = [
-                r
-                for r in csv.DictReader(stream)
-                if (r["model"], r["split"]) != (row["model"], row["split"])
-            ]
+            existing = [r for r in csv.DictReader(stream) if _master_key(r) != _master_key(row)]
     existing.append(row)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as stream:
+    temporary = path.with_name(path.name + ".tmp")
+    with temporary.open("w", encoding="utf-8", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=MASTER_FIELDS)
         writer.writeheader()
         writer.writerows(existing)
+    temporary.replace(path)
 
 
 def main() -> None:

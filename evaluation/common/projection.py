@@ -10,7 +10,9 @@ collapsing. If the normalized skeleton equals the reference skeleton the labels
 are read directly. Otherwise the two letter sequences are aligned with a
 Levenshtein backtrace; reference letters matched to an identical predicted
 letter take its label, and every other reference letter is reported as
-unaligned and receives label 0 (No Diacritic).
+unaligned and receives label 0 (No Diacritic). Outputs more than four times
+longer than the reference skip the alignment and count every letter as
+unaligned, which bounds memory on runaway generations.
 """
 
 import unicodedata
@@ -21,7 +23,8 @@ from evaluation.common.labels import BASE_MARKS, SHADDA, apply_diacritics
 
 VOWEL_TO_BASE = {mark: index for index, mark in enumerate(BASE_MARKS) if mark}
 COMPETITION_MARKS = frozenset(VOWEL_TO_BASE) | {SHADDA}
-TATWEEL = "ـ"
+TATWEEL = "\u0640"
+MAX_LENGTH_RATIO = 4
 
 
 @dataclass(frozen=True)
@@ -113,6 +116,12 @@ def project(chars: Sequence[str], predicted_text: str) -> Projection:
         labels = tuple(label for _, label in units)
         aligned = tuple(True for _ in chars)
         match = True
+    elif len(hypothesis_chars) > MAX_LENGTH_RATIO * len(chars) + 50:
+        # Runaway output (e.g. an LLM that repeats itself): skip the quadratic
+        # alignment and count every letter as unaligned.
+        labels = tuple(0 for _ in chars)
+        aligned = tuple(char == " " for char in chars)
+        match = False
     else:
         matched = _align(chars, hypothesis_chars)
         labels = tuple(

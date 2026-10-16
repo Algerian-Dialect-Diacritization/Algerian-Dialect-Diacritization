@@ -51,8 +51,17 @@ def evaluation_inputs(data_root: Path, split: str) -> List[Dict[str, str]]:
     ids = (data_root / "test_data" / "raw_sentences_test_ids.txt").read_text(
         encoding="utf-8"
     ).split("\n")
-    pairs = [(i.strip(), t.strip()) for i, t in zip(ids, texts) if i.strip()]
-    return [{"sent_id": sent_id, "input": text} for sent_id, text in pairs]
+    while ids and not ids[-1].strip():
+        ids.pop()
+    while texts and not texts[-1].strip():
+        texts.pop()
+    if len(ids) != len(texts):
+        raise ValueError(
+            "test ids ({}) and sentences ({}) have different line counts".format(len(ids), len(texts))
+        )
+    if any(not i.strip() for i in ids):
+        raise ValueError("test ids file contains blank lines")
+    return [{"sent_id": i.strip(), "input": t.strip()} for i, t in zip(ids, texts)]
 
 
 def select_fewshot(data_root: Path, k: int, seed: int) -> List[Dict[str, str]]:
@@ -113,6 +122,8 @@ def main() -> None:
     args = parser.parse_args()
 
     rows = evaluation_inputs(args.data_root, args.split)
+    if not 1 <= args.num_batches <= len(rows):
+        parser.error("--num-batches must be between 1 and {}".format(len(rows)))
     inputs_path = args.out_dir / "inputs" / "{}.jsonl".format(args.split)
     inputs_path.parent.mkdir(parents=True, exist_ok=True)
     with inputs_path.open("w", encoding="utf-8") as stream:
@@ -128,6 +139,11 @@ def main() -> None:
 
     batch_dir = args.out_dir / "batches" / args.condition / args.split
     batch_dir.mkdir(parents=True, exist_ok=True)
+    # Drop any previous manifest first: an interrupted rebuild then leaves no
+    # manifest at all instead of an old manifest describing new prompts.
+    (batch_dir / "manifest.json").unlink(missing_ok=True)
+    for stale in batch_dir.glob("batch_*.prompt.md"):
+        stale.unlink()
     manifest = {
         "split": args.split,
         "condition": args.condition,

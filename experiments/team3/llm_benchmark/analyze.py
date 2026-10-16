@@ -25,6 +25,11 @@ SHORT_VOWELS = {1, 3, 5, 9, 11, 13}
 SUKUN = {7, 15}
 
 
+def _rate(numerator: int, denominator: int):
+    """Ratio, or None when the group is empty (reported as null in analysis.json)."""
+    return numerator / denominator if denominator else None
+
+
 def words_of(record: SentenceRecord) -> List[Tuple[int, int]]:
     spans, start = [], 0
     for position in range(len(record.chars) + 1):
@@ -64,11 +69,11 @@ def position_rates(records, predictions) -> Dict[str, float]:
             counts["final_sukun"] += int(labels[stop - 1] in SUKUN)
             counts["final_none"] += int(labels[stop - 1] == 0)
     return {
-        "word_initial_sukun_rate": counts["initial_sukun"] / counts["initial"],
-        "word_final_short_vowel_rate": counts["final_short_vowel"] / counts["final"],
-        "word_final_tanween_rate": counts["final_tanween"] / counts["final"],
-        "word_final_sukun_rate": counts["final_sukun"] / counts["final"],
-        "word_final_no_diacritic_rate": counts["final_none"] / counts["final"],
+        "word_initial_sukun_rate": _rate(counts["initial_sukun"], counts["initial"]),
+        "word_final_short_vowel_rate": _rate(counts["final_short_vowel"], counts["final"]),
+        "word_final_tanween_rate": _rate(counts["final_tanween"], counts["final"]),
+        "word_final_sukun_rate": _rate(counts["final_sukun"], counts["final"]),
+        "word_final_no_diacritic_rate": _rate(counts["final_none"], counts["final"]),
         "multi_letter_words": counts["initial"],
     }
 
@@ -82,7 +87,7 @@ def bucket_wer(records, predictions, lexicon) -> Dict[str, Dict[str, float]]:
             totals[name] += 1
             errors[name] += int(tuple(labels[start:stop]) != record.labels[start:stop])
     return {
-        name: {"words": totals[name], "wer": errors[name] / totals[name]}
+        name: {"words": totals[name], "wer": _rate(errors[name], totals[name])}
         for name in ("seen_unambiguous", "seen_ambiguous", "oov")
     }
 

@@ -9,10 +9,13 @@ line), then writes:
     <model>/predictions/<condition>_<split>.vocalized.txt  (test only) one
         skeleton-repaired line per input, in input order, for make_submission.py
 
-Exits with status 1 when any sentence is missing so the batch can be re-run.
+Exits with status 1, writing only the report, when any sentence is missing,
+duplicated, unexpected or absent from the manifest, or when a prompt file no
+longer matches its manifest hash, so a bad batch can be re-run.
 """
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -56,8 +59,18 @@ def main() -> None:
     ]
     output_dir = args.llm_dir / args.model / args.condition / args.split
     texts: Dict[str, str] = {}
-    report = {"batches": [], "missing": [], "duplicated": [], "unexpected": []}
+    report = {
+        "batches": [], "missing": [], "duplicated": [], "unexpected": [],
+        "not_in_manifest": [], "prompt_hash_mismatch": [],
+    }
+    manifest_ids: List[str] = []
     for batch in manifest["batches"]:
+        manifest_ids.extend(batch["sent_ids"])
+        prompt_path = batch_dir / batch["prompt_file"]
+        if not prompt_path.exists() or hashlib.sha256(
+            prompt_path.read_text(encoding="utf-8").encode()
+        ).hexdigest() != batch["prompt_sha256"]:
+            report["prompt_hash_mismatch"].append(batch["prompt_file"])
         found = parse_batch(output_dir / batch["prompt_file"].replace(".prompt.md", ".out.tsv"))
         expected = set(batch["sent_ids"])
         missing = [i for i in batch["sent_ids"] if i not in found]
@@ -71,39 +84,51 @@ def main() -> None:
                 if len(candidates) > 1:
                     report["duplicated"].append(sent_id)
                 texts[sent_id] = candidates[0]
+    input_ids = [row["sent_id"] for row in inputs]
+    report["not_in_manifest"] = sorted(set(input_ids) - set(manifest_ids))
+    report["duplicated"].extend(
+        sorted({i for i in manifest_ids if manifest_ids.count(i) > 1})
+    )
+    report.update(sentences=len(inputs), collected=len(texts))
 
     prediction_dir = args.llm_dir / args.model / "predictions"
     prediction_dir.mkdir(parents=True, exist_ok=True)
     stem = "{}_{}".format(args.condition, args.split)
+    problems = [key for key in ("missing", "duplicated", "unexpected", "not_in_manifest", "prompt_hash_mismatch") if report[key]]
+    if problems:
+        # Only the report is written, so a previous complete collection is never replaced.
+        _write_atomic(prediction_dir / (stem + ".collect.json"), json.dumps(report, indent=2) + "\n")
+        print(json.dumps({k: v for k, v in report.items() if k != "batches"}, indent=2))
+        print("collection incomplete: {}".format(", ".join(problems)), file=sys.stderr)
+        sys.exit(1)
+
     skeleton_matches = 0
-    with (prediction_dir / (stem + ".jsonl")).open("w", encoding="utf-8") as stream:
-        for row in inputs:
-            if row["sent_id"] in texts:
-                stream.write(
-                    json.dumps({"sent_id": row["sent_id"], "text": texts[row["sent_id"]]}, ensure_ascii=False)
-                    + "\n"
-                )
     repaired: List[str] = []
     for row in inputs:
-        result = project(tuple(row["input"]), texts.get(row["sent_id"], ""))
+        result = project(tuple(row["input"]), texts[row["sent_id"]])
         skeleton_matches += int(result.skeleton_match)
         repaired.append(result.repaired_text)
+    _write_atomic(
+        prediction_dir / (stem + ".jsonl"),
+        "".join(
+            json.dumps({"sent_id": row["sent_id"], "text": texts[row["sent_id"]]}, ensure_ascii=False) + "\n"
+            for row in inputs
+        ),
+    )
     if args.split == "test":
-        (prediction_dir / (stem + ".vocalized.txt")).write_text(
-            "\n".join(repaired) + "\n", encoding="utf-8"
-        )
+        _write_atomic(prediction_dir / (stem + ".vocalized.txt"), "\n".join(repaired) + "\n")
     report.update(
-        sentences=len(inputs),
-        collected=len(texts),
         skeleton_match=skeleton_matches,
         skeleton_match_rate=skeleton_matches / len(inputs),
     )
-    (prediction_dir / (stem + ".collect.json")).write_text(
-        json.dumps(report, indent=2) + "\n", encoding="utf-8"
-    )
+    _write_atomic(prediction_dir / (stem + ".collect.json"), json.dumps(report, indent=2) + "\n")
     print(json.dumps({k: v for k, v in report.items() if k != "batches"}, indent=2))
-    if report["missing"]:
-        sys.exit(1)
+
+
+def _write_atomic(path: Path, content: str) -> None:
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(content, encoding="utf-8")
+    temporary.replace(path)
 
 
 if __name__ == "__main__":

@@ -44,6 +44,8 @@ def merge(repo: Path, scored_path: Path, llm_kaggle: Optional[List[float]]) -> L
     with scored_path.open(encoding="utf-8") as stream:
         scored = list(csv.DictReader(stream))
     for entry in scored:
+        if entry["split"] != "dev":
+            continue  # dev_* columns only; test scores come from the leaderboard
         name = entry["model"]
         if name in SCORED_TO_KEY:
             row = by_key[SCORED_TO_KEY[name]]
@@ -189,6 +191,9 @@ def write_latex_llm(rows, analysis: Dict, path: Path) -> None:
         "\\midrule",
     ]
     for key, analysis_name, label in systems:
+        if key not in by_key or analysis_name not in analysis["systems"]:
+            print("tab_llm: skipping {} (not scored or not analyzed)".format(label))
+            continue
         r = by_key[key]
         buckets = analysis["systems"][analysis_name]["bucket_wer"]
         lines.append(
