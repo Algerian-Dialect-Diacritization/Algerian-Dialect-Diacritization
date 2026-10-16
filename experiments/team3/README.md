@@ -20,7 +20,7 @@ python -m evaluation.common.score --gold data/dev_data/dev_Algerian-DIAC.jsonl \
 python -m experiments.team3.llm_benchmark.analyze --gold data/dev_data/dev_Algerian-DIAC.jsonl \
   --train data/train_data/train_Algerian-DIAC.jsonl \
   --system llm_zero=... --system llm_five=... --system t4_neural=... --system t4_v2=... \
-  --compare t4_neural:llm_five --compare t4_v2:llm_five --compare llm_five:llm_zero \
+  --compare llm_five:t4_neural --compare llm_five:t4_v2 --compare llm_five:llm_zero \
   --examples-for llm_five --reference-system t4_v2 --out $D/llm/analysis
 ```
 

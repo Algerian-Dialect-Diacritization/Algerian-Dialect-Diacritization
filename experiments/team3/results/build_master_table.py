@@ -13,6 +13,7 @@ tab_main_results.tex, tab_llm.tex. Tables are never edited by hand.
 import argparse
 import csv
 import json
+import sys
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -63,6 +64,11 @@ def merge(repo: Path, scored_path: Path, llm_kaggle: Optional[List[float]]) -> L
             rows.append(row)
             by_key[row["key"]] = row
         else:
+            print(
+                "warning: scored model {!r} has no table mapping and is not in MASTER_RESULTS.csv; "
+                "add it to SCORED_TO_KEY or NEW_SCORED_ROWS".format(name),
+                file=sys.stderr,
+            )
             continue
         for scored_field, field in SCORED_FIELDS.items():
             row[field] = float(entry[scored_field])

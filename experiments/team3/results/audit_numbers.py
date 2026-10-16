@@ -41,15 +41,17 @@ def known_values(master: Path, json_files: Iterable[Path]) -> Set[float]:
     return values
 
 
-def traceable(number: str, values: Set[float]) -> bool:
-    digits = len(number.split(".")[1])
-    target = float(number)
+# A leading -, + or U+2212 is a sign unless it follows a word character, a dot
+# or another dash (LaTeX ranges such as 94.97--95.41 stay unsigned).
+NUMBER = re.compile(r"(?:(?<![\w.\-])([-+\u2212])|(?<![\w.]))(\d+\.\d+)(?![\w.])")
+
+
+def traceable(sign: str, digits_text: str, values: Set[float]) -> bool:
+    """Match the signed prose number against signed source values (as is or x100)."""
+    digits = len(digits_text.split(".")[1])
+    target = float(digits_text) * (-1.0 if sign in ("-", "\u2212") else 1.0)
     tolerance = 0.5 * 10 ** -digits + 1e-9
-    for value in values:
-        for scaled in (value, 100 * value, abs(value), 100 * abs(value)):
-            if abs(scaled - target) <= tolerance:
-                return True
-    return False
+    return any(abs(scaled - target) <= tolerance for value in values for scaled in (value, 100 * value))
 
 
 def main() -> None:
@@ -65,10 +67,10 @@ def main() -> None:
         for line_number, line in enumerate(text.splitlines(), start=1):
             if line.lstrip().startswith("%"):
                 continue
-            for number in re.findall(r"(?<![\w.])\d+\.\d+(?![\w.])", line):
-                if not traceable(number, values):
+            for sign, number in NUMBER.findall(line.replace("$", "")):
+                if not traceable(sign, number, values):
                     flagged += 1
-                    print("{}:{}: {}".format(path.name, line_number, number))
+                    print("{}:{}: {}{}".format(path.name, line_number, sign, number))
     print("untraceable numbers: {}".format(flagged))
 
 

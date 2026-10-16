@@ -16,7 +16,7 @@ One JSON object per line, any order, one row per gold sentence:
 {"sent_id": "002345", "text": "<vocalized sentence>"}
 ```
 
-Text rows are projected onto the gold skeleton (`projection.py`). Mark parsing matches `make_submission.py`. Letters that cannot be aligned count as errors in `accuracy_strict`, and WER/CER are computed on the text itself.
+Text rows are projected onto the gold skeleton (`projection.py`). Mark parsing matches `make_submission.py`. Letters that cannot be aligned count as errors in `accuracy_strict`; WER/CER use the normalized text (NFC, punctuation/tatweel/unsupported-mark removal, collapsed whitespace), so changed letters are penalized there.
 
 ## Usage
 
@@ -35,7 +35,7 @@ This writes `metrics.json` (all metrics, per-class P/R/F1, confusion matrix) and
 | Metric | Definition |
 |---|---|
 | accuracy (= micro-F1), der | over all non-space letters, gold "no diacritic" letters included; DER = 1 − accuracy |
-| der_star, wer_star | final letter of each multi-letter word excluded (−CE); one-letter words excluded (same as `utils/evaluation_metrics.py`) |
+| der_star, wer_star | final letter of each multi-letter word excluded (−CE); one-letter words excluded (same convention as Track 1/3's `utils/evaluation_metrics.py`, branch `Track1/Thabet/P2-Strategy-A`) |
 | wer, cer | Levenshtein over vocalized words / NFC code points (spaces included) |
 | wer_aligned | 1 − word accuracy (Track 1/3 WER definition) |
 | der_diacritized | DER over letters whose gold label is not "no diacritic" |

@@ -17,6 +17,7 @@ from evaluation.common.projection import normalize_vocalized, project
 from evaluation.common.score import append_master, load_predictions, score
 from experiments.team3.llm_benchmark.build_batches import evaluation_inputs
 from experiments.team3.llm_benchmark.collect_outputs import main as collect_main
+from experiments.team3.results.audit_numbers import NUMBER, traceable
 from experiments.team3.results.build_master_table import merge
 
 
@@ -265,3 +266,11 @@ def test_table_builder_ignores_test_rows_in_dev_columns(tmp_path: Path) -> None:
         })
     rows = {r["key"]: r for r in merge(Path("."), scored, None)}
     assert rows["llm_claude_five"]["dev_accuracy"] == 0.9
+
+
+def test_audit_keeps_signs_and_reads_latex_ranges_as_unsigned() -> None:
+    found = NUMBER.findall("gap of -0.99 (CI [-1.41, +0.35]) and 94.97--95.41".replace("$", ""))
+    assert found == [("-", "0.99"), ("-", "1.41"), ("+", "0.35"), ("", "94.97"), ("", "95.41")]
+    assert traceable("-", "0.25", {-0.0025})
+    assert not traceable("-", "0.25", {0.25})
+    assert not traceable("", "0.25", {-0.25})

@@ -101,7 +101,12 @@ def sentence_correct_letters(records, predictions) -> List[Tuple[int, int]]:
 
 
 def paired_bootstrap(a, b, samples: int, seed: int) -> Dict[str, float]:
-    """Sentence-level paired bootstrap of the letter-accuracy difference a - b."""
+    """Sentence-level paired bootstrap of the letter-accuracy difference a - b.
+
+    Significance is read from the 95% percentile interval (does it exclude 0?).
+    ``bootstrap_prob_a_better`` is the share of resamples where a beats b; it is
+    a bootstrap probability, not a p-value.
+    """
     rng = random.Random(seed)
     n = len(a)
     observed = sum(x for x, _ in a) / sum(t for _, t in a) - sum(x for x, _ in b) / sum(t for _, t in b)
@@ -118,7 +123,7 @@ def paired_bootstrap(a, b, samples: int, seed: int) -> Dict[str, float]:
         "delta_accuracy": observed,
         "ci95_low": deltas[int(0.025 * samples)],
         "ci95_high": deltas[int(0.975 * samples) - 1],
-        "p_a_better": wins / samples,
+        "bootstrap_prob_a_better": wins / samples,
         "samples": samples,
     }
 

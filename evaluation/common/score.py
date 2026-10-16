@@ -149,8 +149,10 @@ def score(
     )
     metrics["unaligned_letters"] = sum(row["unaligned_letters"] for row in rows)
     metrics["accuracy_strict"] = (
-        metrics["correct_letters"] - unaligned_correct
-    ) / metrics["scored_letters"]
+        (metrics["correct_letters"] - unaligned_correct) / metrics["scored_letters"]
+        if metrics["scored_letters"]
+        else 0.0
+    )
     metrics["skeleton_mismatch_rate"] = (
         metrics["skeleton_mismatch_count"] / metrics["sentences"]
     )

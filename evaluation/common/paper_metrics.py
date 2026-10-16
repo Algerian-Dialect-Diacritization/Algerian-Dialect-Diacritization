@@ -3,7 +3,7 @@
 Track-neutral copy of ``evaluation/track4/Lyes/paper_metrics.py`` extended
 with DER, the starred (-CE) metrics DER*/WER* and DER over gold-diacritized
 letters. Starred metrics follow the repository-wide definition in
-``utils/evaluation_metrics.py`` (Track 1/3): each multi-letter word's final
+``utils/evaluation_metrics.py`` (Track 1/3, branch ``Track1/Thabet/P2-Strategy-A``): each multi-letter word's final
 letter is excluded and one-letter words do not enter starred denominators.
 """
 
