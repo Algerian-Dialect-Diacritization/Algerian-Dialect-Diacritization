@@ -16,6 +16,7 @@ from evaluation.common.paper_metrics import (
 from evaluation.common.projection import normalize_vocalized, project
 from evaluation.common.score import append_master, load_predictions, score
 from experiments.team3.llm_benchmark.build_batches import evaluation_inputs
+from experiments.team3.llm_benchmark.build_batches import main as build_main
 from experiments.team3.llm_benchmark.collect_outputs import main as collect_main
 from experiments.team3.results.audit_numbers import NUMBER, traceable
 from experiments.team3.results.build_master_table import merge
@@ -153,8 +154,9 @@ def test_append_master_replaces_same_model_track_and_split(tmp_path: Path) -> No
     append_master(master, {"model": "m", "track": "t1", "split": "dev", "accuracy": 0.7})
     append_master(master, {"model": "m", "track": "t1", "split": "test", "accuracy": 0.6})
     append_master(master, {"model": "m", "track": "t2", "split": "dev", "accuracy": 0.9})
-    rows = {(r["model"], r["track"], r["split"]): r for r in _read_csv(master)}
-    assert len(rows) == 3
+    csv_rows = _read_csv(master)
+    assert len(csv_rows) == 3
+    rows = {(r["model"], r["track"], r["split"]): r for r in csv_rows}
     assert rows[("m", "t1", "dev")]["accuracy"] == "0.7"
     assert rows[("m", "t1", "test")]["accuracy"] == "0.6"
     assert rows[("m", "t2", "dev")]["accuracy"] == "0.9"
@@ -202,6 +204,9 @@ def test_test_inputs_with_mismatched_line_counts_are_rejected(tmp_path: Path) ->
     root = _data_root(tmp_path, "000001\n000002\n", "بت\n")
     with pytest.raises(ValueError, match="different line counts"):
         evaluation_inputs(root, "test")
+    blank = _data_root(tmp_path / "blank", "000001\n000002\n", "بت\n\nتم\n")
+    with pytest.raises(ValueError):
+        evaluation_inputs(blank, "test")
     ok = _data_root(tmp_path / "ok", "000001\n000002\n", "بت\nتم\n")
     assert [r["sent_id"] for r in evaluation_inputs(ok, "test")] == ["000001", "000002"]
 
@@ -274,3 +279,20 @@ def test_audit_keeps_signs_and_reads_latex_ranges_as_unsigned() -> None:
     assert traceable("-", "0.25", {-0.0025})
     assert not traceable("-", "0.25", {0.25})
     assert not traceable("", "0.25", {-0.25})
+
+
+def test_rebuild_is_refused_while_model_responses_exist(tmp_path: Path, monkeypatch) -> None:
+    root = _data_root(tmp_path, "000001\n000002\n", "بت\nتم\n")
+    out = tmp_path / "llm"
+    argv = ["build_batches", "--data-root", str(root), "--out-dir", str(out),
+            "--split", "test", "--condition", "zero_shot", "--num-batches", "1"]
+    monkeypatch.setattr(sys, "argv", argv)
+    build_main()
+    manifest = out / "batches" / "zero_shot" / "test" / "manifest.json"
+    assert manifest.exists()
+    response = out / "claude-opus-5-5" / "zero_shot" / "test" / "batch_01.out.tsv"
+    response.parent.mkdir(parents=True)
+    response.write_text("000001\tبَتْ\n", encoding="utf-8")
+    with pytest.raises(SystemExit):
+        build_main()
+    assert response.exists() and manifest.exists()

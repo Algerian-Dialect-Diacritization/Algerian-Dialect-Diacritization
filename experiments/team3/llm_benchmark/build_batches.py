@@ -61,6 +61,8 @@ def evaluation_inputs(data_root: Path, split: str) -> List[Dict[str, str]]:
         )
     if any(not i.strip() for i in ids):
         raise ValueError("test ids file contains blank lines")
+    if any(not t.strip() for t in texts):
+        raise ValueError("test sentences file contains blank lines")
     return [{"sent_id": i.strip(), "input": t.strip()} for i, t in zip(ids, texts)]
 
 
@@ -138,6 +140,18 @@ def main() -> None:
         )
 
     batch_dir = args.out_dir / "batches" / args.condition / args.split
+    responses = sorted(
+        args.out_dir.glob("*/{}/{}/batch_*.out.tsv".format(args.condition, args.split))
+    )
+    if responses:
+        # Never mix answers generated for older prompts with a new generation,
+        # and never delete recorded model outputs automatically.
+        parser.error(
+            "{} model responses already exist for {}/{} (e.g. {}); move them aside "
+            "before rebuilding these prompts".format(
+                len(responses), args.condition, args.split, responses[0]
+            )
+        )
     batch_dir.mkdir(parents=True, exist_ok=True)
     # Drop any previous manifest first: an interrupted rebuild then leaves no
     # manifest at all instead of an old manifest describing new prompts.
