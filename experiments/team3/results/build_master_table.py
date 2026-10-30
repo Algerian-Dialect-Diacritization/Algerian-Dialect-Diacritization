@@ -103,10 +103,10 @@ TYPE_LABEL = {
 MAIN_CAPTION = (
     "Baselines on DzTashkeel. Every fine-tuned system is trained on the Algerian corpus only; the LLM rows "
     "use prompting without any fine-tuning. Leaderboard columns give "
-    "letter-level micro-F1 (\\%) on the hidden test split (public/private partitions); they are the only "
+    "letter-level micro-F1 (\\%) on the hidden test split (public and private partitions, each about 50\\% of the test letters); they are the only "
     "numbers computed identically for every system. Dev columns are as reported for each family. "
     "$^\\dagger$~Dev metrics on a held-out 20\\% of the dev split (3{,}228 letters). "
-    "$^\\ddagger$~Family evaluator; dev scope not stated. $^\\S$~Leaderboard partition not stated. "
+    "$^\\ddagger$~Family evaluator; dev scope not stated. "
     "Unmarked dev numbers use the full dev split (15{,}897 letters)."
 )
 LLM_CAPTION = (
@@ -191,7 +191,7 @@ def write_markdown_main(rows, path: Path) -> None:
     lines = [
         "# Main results (generated -- do not edit)\n",
         "Kaggle = letter micro-F1 (%) on the hidden test split. Dev as reported. "
-        "† 20% dev slice. ‡ family evaluator, scope not stated. § leaderboard partition not stated.\n",
+        "† 20% dev slice. ‡ family evaluator, scope not stated.\n",
         "| Model | Type | Kaggle pub. | Kaggle priv. | Dev acc. | Dev WER | Source |",
         "|---|---|---:|---:|---:|---:|---|",
     ]

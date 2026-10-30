@@ -273,6 +273,17 @@ def test_table_builder_ignores_test_rows_in_dev_columns(tmp_path: Path) -> None:
     assert rows["llm_claude_five"]["dev_accuracy"] == 0.9
 
 
+def test_kaggle_columns_follow_the_leaderboard() -> None:
+    from experiments.team3.results.reported_results import all_reported
+
+    rows = {r["key"]: r for r in all_reported(Path("."))}
+    top = rows["t3_arabert_v02_09517_bilstm_crf_head"]
+    assert (top["kaggle_public"], top["kaggle_private"]) == (0.95413, 0.94743)
+    assert (rows["t4_souha_tcc"]["kaggle_public"], rows["t4_souha_tcc"]["kaggle_private"]) == (0.93977, 0.93344)
+    assert rows["t2_canine_s"]["kaggle_private"] == 0.93235
+    assert all(r["kaggle_unspecified"] is None for r in rows.values())
+
+
 def test_audit_keeps_signs_and_reads_latex_ranges_as_unsigned() -> None:
     found = NUMBER.findall("gap of $-0.99$ (CI $[-1.41, +0.35]$) and 94.97--95.41, word$0.5$")
     assert found == [("-", "0.99"), ("-", "1.41"), ("+", "0.35"), ("", "94.97"), ("", "95.41"), ("", "0.5")]

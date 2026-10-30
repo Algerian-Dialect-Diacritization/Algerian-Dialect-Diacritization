@@ -25,6 +25,9 @@ T2_OVERVIEW = "experiments/track2/canine_s_model/strategy_a_overview.md"
 LYES = "Lyes local README.md (Kaggle submissions table) + outputs/paper_metrics_v2"
 SOUHA = "documentation/track4/AbidatSouha/results.md"
 ROUMAISSA_T4 = "documentation/track4/SmailRoumaissa/README.md"
+# Competition leaderboard as read on 30 Oct 2026 (Public and Private tabs, final standings).
+# Each team's entry is its best public / its private score; a late submission is not listed.
+LEADERBOARD = "Kaggle leaderboard, final standings (read 30 Oct 2026)"
 
 
 def _row(**values) -> Dict:
@@ -92,18 +95,22 @@ def track2_rows() -> List[Dict]:
     return [
         _row(
             key="t2_canine_s", family="Character-level pretrained", slot="c",
-            model="CANINE-S", kaggle_public=0.93880, kaggle_private=0.93369,
-            dev_accuracy=0.9336, dev_macro_f1=0.4559, dev_scope="full",
-            evaluator="Track 2", main_table=True, source=ROUMAISSA_S6,
-            note="Repo overview ({}) reports dev 0.9452 / private 0.93235 instead; "
-            "draft dev accuracy equals its Kaggle private score to 4 decimals.".format(T2_OVERVIEW),
+            model="CANINE-S", kaggle_public=0.93770, kaggle_private=0.93235,
+            dev_accuracy=0.9452, dev_scope="unknown",
+            evaluator="Track 2", main_table=True,
+            source="{} (entry Manel Ait Said); dev from {}".format(LEADERBOARD, T2_OVERVIEW),
+            note="Kaggle verified on the leaderboard. The {} draft gave 0.93880 / 0.93369 "
+            "(its public score is the LLM's) and dev 0.9336, which equals its old private score; "
+            "dev 0.9452 and macro-F1 are from the Track 2 report, owners to confirm.".format(ROUMAISSA_S6),
         ),
         _row(
             key="t2_canine_s_twohead", family="Character-level pretrained", slot="c",
-            model="CANINE-S, factorized head (Shadda × vowel)", kaggle_public=0.94427,
-            kaggle_private=0.94062, dev_accuracy=0.9406, dev_macro_f1=0.5281,
+            model="CANINE-S, factorized head (Shadda × vowel)",
+            dev_accuracy=0.9406, dev_macro_f1=0.5281,
             dev_scope="full", evaluator="Track 2", main_table=True, source=ROUMAISSA_S6,
-            note="Draft dev accuracy equals its Kaggle private score to 4 decimals; repo overview gives macro-F1 0.7040.",
+            note="Kaggle score not shown: the draft's 0.94427 / 0.94062 is not on the leaderboard "
+            "(its private score equals its dev accuracy). Owners to give the right submission "
+            "(candidate: Aya_Benmansour_12, 0.94585 public / 0.93892 private). Repo overview gives macro-F1 0.7040.",
         ),
     ]
 
@@ -120,7 +127,10 @@ def track3_rows(repo: Path) -> List[Dict]:
     for line in leaderboard.splitlines():
         cells = [cell.strip() for cell in line.strip("|").split("|")]
         if len(cells) == 7 and cells[2] == "track3":
-            kaggle[(cells[1], cells[3])] = (float(cells[5]), float(cells[6]))
+            # experiments/leaderboard.md lists the columns as Public | Private, but the
+            # leaderboard shows the reverse for its top entry (Selmakh: 0.95413 public,
+            # 0.94743 private), so every row of that table is read with the columns swapped.
+            kaggle[(cells[1], cells[3])] = (float(cells[6]), float(cells[5]))
     pretty = {
         "arabert_v02": "AraBERTv02", "camelbert_da": "CAMeLBERT-DA", "camelbert_mix": "CAMeLBERT-Mix",
         "marbert": "MARBERT", "marbertv2": "MARBERTv2", "dziribert": "DziriBERT", "alclam": "AlcLaM",
@@ -147,7 +157,9 @@ def track3_rows(repo: Path) -> List[Dict]:
                 dev_macro_f1=macro, dev_scope="slice20" if letters < 15897 else "full",
                 evaluator="Track 3", main_table=(name, head) in main,
                 source="evaluation/track3/{}/report_strategy_a_{}.md + experiments/leaderboard.md".format(head, name),
-                note="Dev scored on {} letters (held-out 20% of dev).".format(letters),
+                note="Dev scored on {} letters (held-out 20% of dev). Public/private swapped "
+                "relative to experiments/leaderboard.md; verified on the leaderboard for the top "
+                "entry only, the rest follow the same swap.".format(letters),
             )
         )
     rows.append(
@@ -182,10 +194,12 @@ def track4_reported_rows() -> List[Dict]:
              dev_scope="full", evaluator="Track 4 paper metrics", main_table=True, source=LYES,
              note="Dev = 14,977 / 15,897 letters (equal-weight production ensemble)."),
         _row(key="t4_souha_tcc", family="Transformer from scratch", slot="d",
-             model="Transformer-CNN-CRF (ii), word features", kaggle_unspecified=0.93977,
+             model="Transformer-CNN-CRF (ii), word features",
+             kaggle_public=0.93977, kaggle_private=0.93344,
              dev_accuracy=0.9343, dev_wer=0.2023, dev_scope="full", evaluator="Track 4 (Souha)",
-             main_table=True, source=SOUHA,
-             note="Leaderboard split (public/private) not stated; macro-F1 81.91 is over 9 live classes."),
+             main_table=True, source="{}; Kaggle: {} (entry Souha Abidat)".format(SOUHA, LEADERBOARD),
+             note="Her 0.93977 is the public score; the private score is 0.93344. "
+             "Macro-F1 81.91 is over 9 live classes."),
         _row(key="t4_roumaissa_tcc", family="Transformer from scratch", slot="d",
              model="Transformer-CNN-CRF (iii), relative positions", dev_accuracy=0.93716, dev_scope="full",
              evaluator="Track 4 (Roumaissa)", main_table=True, source=ROUMAISSA_T4,
@@ -195,7 +209,12 @@ def track4_reported_rows() -> List[Dict]:
              system_type="post-processed", kaggle_public=0.94610, kaggle_private=0.94427,
              dev_accuracy=0.94213, dev_scope="full", evaluator="Track 4 (Roumaissa)",
              main_table=True, source=ROUMAISSA_T4,
-             note="Fusion gate tuned on dev (45 combos), so dev is optimistic."),
+             note="Fusion gate tuned on dev (45 combos), so dev is optimistic. Kaggle 0.94610 / 0.94427 "
+             "is from the README but not found on the leaderboard (entry Roumaissa Sml: 0.93381 / 0.93186); owner to confirm."),
+        _row(key="t4_ines_dscat", family="Transformer from scratch", slot="d",
+             model="Dual-Stream CRF head (DSCAT)", kaggle_public=0.94147, kaggle_private=0.93721,
+             main_table=True, source="{} (entry Ines Bencherif, attributed by name)".format(LEADERBOARD),
+             note="No dev results documented; Kaggle score only."),
     ]
 
 
